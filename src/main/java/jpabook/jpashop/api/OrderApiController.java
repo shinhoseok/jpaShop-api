@@ -49,8 +49,13 @@ public class OrderApiController {
 
     /**
      * V1. 엔티티 직접 노출
-     * - Hibernate5Module 모듈 등록, LAZY=null 처리
      * - 양방향 관계 문제 발생 -> @JsonIgnore
+     * : 해당 API를 호출하면 Order Member와 Order Delivery간에 서로의 엔티티를 
+     *  조회하는것이 무한순회를 하게되어 에러가 발생하고 제대로된 Response가 오지 못한다.
+     *  - Hibernate5Module 모듈 등록, LAZY=null 처리
+     *  : Member, Delivery등의 엔티티들을 조회하는 시점에서는 실제 객체가 아닌 프록시 객체를 
+     *  가지고 있다. 그렇기 때문에 jackson 라이브러리는 기본적으로 이 프록시 객체를 json으로 
+     *  어떻게 생성해야 하는지 모르기 때문에 예외가 발생하는 것이다
      */
     @GetMapping("/api/v1/orders")
     public List<Order> ordersV1() {
@@ -64,6 +69,7 @@ public class OrderApiController {
         return all;
     }
 
+    //1:N 리스트 DTO변환
     @GetMapping("/api/v2/orders")
     public List<OrderDto> ordersV2() {
         List<Order> orders = orderRepository.findAll();
@@ -87,7 +93,10 @@ public class OrderApiController {
     /**
      * V3.1 엔티티를 조회해서 DTO로 변환 페이징 고려
      * - ToOne 관계만 우선 모두 페치 조인으로 최적화
-     * - 컬렉션 관계는 hibernate.default_batch_fetch_size, @BatchSize로 최적화
+     * - 컬렉션 관계는 hibernate.default_batch_fetch_size, @BatchSize(size = 1000)로 최적화
+     * - batchSize만큼 지연로딩때 in 쿼리로 땡겨온다. @BatchSize는 orderItems 엔티티 속성 위에다 기입
+     * - 1:1 이나 N:1에 @BatchSize는 엔티티 클래스명 위에다 적는다.
+     * - batch Size는 데이터베이스 in쿼리 규격에 맞게 100~1000 사이 권장
      */
     @GetMapping("/api/v3.1/orders")
     public List<OrderDto> ordersV3_page(@RequestParam(value = "offset", defaultValue = "0") int offset,
@@ -100,21 +109,24 @@ public class OrderApiController {
 
         return result;
     }
-
+    
+    //컬렉션 엔티티 DTO로 바로 조회(N+1 컬렉션수만큼 쿼리가 나감)
     @GetMapping("/api/v4/orders")
     public List<OrderQueryDto> ordersV4() {
         return orderQueryRepository.findOrderQueryDtos();
     }
-
+    //위 컬렉션 엔티티 바로조회 최적화1
     @GetMapping("/api/v5/orders")
     public List<OrderQueryDto> ordersV5() {
         return orderQueryRepository.findAllByDto_optimization();
     }
-
+    //위 컬렉션 엔티티 바로조회 최적화2
+    //중복 데이터가 추가되므로 상황에 따라 v5보다 느리다.
+    //중복데이터를 발라내는 작업 등 java작업이 길어짐.
     @GetMapping("/api/v6/orders")
     public List<OrderQueryDto> ordersV6() {
         List<OrderFlatDto> flats = orderQueryRepository.findAllByDto_flat();
-
+        //중복데이터를 발라내는 작업
         return flats.stream()
                 .collect(groupingBy(o -> new OrderQueryDto(o.getOrderId(), o.getName(), o.getOrderDate(), o.getOrderStatus(), o.getAddress()),
                         mapping(o -> new OrderItemQueryDto(o.getOrderId(), o.getItemName(), o.getOrderPrice(), o.getCount()), toList())

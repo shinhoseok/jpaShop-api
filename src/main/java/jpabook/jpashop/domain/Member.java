@@ -21,7 +21,8 @@ public class Member {
     @Embedded
     private Address address;
 
-    @JsonIgnore
+    @JsonIgnore //json 변환시 skip 요런걸 프레젠테이션 계층의
+    //로직을 넣으면 어떤건 필요하고 어떤건 필요없고 지저분해진다.
     @OneToMany(mappedBy = "member")
     private List<Order> orders = new ArrayList<>();
 

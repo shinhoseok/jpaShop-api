@@ -24,7 +24,7 @@ public class InitDb {
 
     private final InitService initService;
 
-    @PostConstruct
+    @PostConstruct //어플리케이션 로딩 시점에 실행
     public void init() {
         initService.dbInit1();
         initService.dbInit2();
